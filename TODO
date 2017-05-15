@@ -1,0 +1,16 @@
+Short Term:
+* Try and run Typo or similar over ackbar
+* See if I can add a :finder_block & :counter_block similar
+  to the *_sql variety. Will need to Submit patch to Rails to allow
+  overriding of acceptable keys.
+* Test if handling binary data through KBBlobs is better
+
+Mid Term:
+* Get the mixins working
+* Run KirbyBase in client/server mode
+* Run through a real web server with FCGI/SCGI etc.
+
+Long Term:
+* Use KB indexes if they exist
+* Integration with KB's Lookup and Link_many
+* Find a solution to joins (and thus to eager associations)

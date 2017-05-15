@@ -1,0 +1,96 @@
+= About Ackbar
+
+Ackbar is an adapter for ActiveRecord (the Rails ORM layer) to the KirbyBase
+pure-ruby plain-text DBMS. Because KirbyBase does not support SQL, joins or
+transactions, this is not a 100% fit. There are some changes to the ActiveRecord
+interface (see below), but it may still be useful in some cases.
+
+= URIs
+
+Ackbar: http://ackbar.rubyforge.org
+
+KirbyBase: http://www.netpromi.com/kirbybase_ruby.html
+
+Building a sample app with Rails/KirbyBase: http://houseonfire.wordpress.com/2006/02/18/hello-world/
+
+Rails: http://www.rubyonrails.com
+
+Pimki: http://pimki.rubyforge.org
+
+= Goals
+
+Ackbar's project goals, in order of importance, are:
+1. Support Pimki with a pure-ruby, cross-platform hassle-less install DBMS
+2. An exercise for me to learn ActiveRecord inside out
+3. Support other "shrink-wrapped" Rails projects with similar needs
+
+As can be seen, the main reason I need Ackbar is so I distribute Pimki across
+multiple platforms without requiring non-Ruby 3rd party libraries. KirbyBase will
+work wherever Ruby works, and so will Pimki. That alleviates the need to repackage
+other bits, end users will not have to install extra software, I have full control
+on the storage, the storage is in plain text. Just what I need to "shrink wrap"
+a Rails project for end-user distribution.
+
+= What's Covered
+
+Ackbar currently passes through a small bootstrap test suite, and through about
+80% of the ActiveRecord test suite. It will never pass 100% of the tests because
+KirbyBase does not support all required functionality.
+
+Ackbar includes a SQL fragment translator, so that simple cross-database code 
+should be maintainable. For example the following will work as expected,
+  Book.find :all, :conditions => "name = 'Pickaxe'"
+  Book.find :all, :conditions => ["name = ?", 'Pickaxe']
+Additionally, you can also provide blocks:
+  Book.find :all, :conditions => lambda{|rec| rec.name == 'Pickaxe'}
+or even:
+  Book.find(:all) {|rec| rec.name == 'Pickaxe'}
+
+Most of these changes are around the #find method for the :conditions parameter,
+but some apply to #update and associations. Basic SQL translation should work
+the same, but you can always provide custom code to be used. See the CHANGELOG
+and the tests for examples.
+
+
+= What's Not Covered
+
+* Transactions
+* Joins, and therefore Eager Associations
+* Mixins
+* All the *_by_sql methods
+* Other plugins that do custom SQL
+
+On the todo list is support for mixins. It might even be possible to rig something
+to simulate joins and eager associations, but that is for a later stage. Transactions
+will obviously only be supported once they are supported by KirbyBase.
+
+Additionally, there are numerous little changes to the standard behaviour. See
+the CHANGELOG and the tests for more details. These may cause little heart attacks
+if you expect a standard SQL database.
+
+It is also worth noting that other plugins that write SQL will not work. You will
+need to get a copy of them to your /vendors dir and modify the relevant parts.
+
+= Installation
+
+Simply:
+  gem install ackbar
+or download the zip file from http://rubyforge.org/projects/ackbar and just stick
+kirbybase_adapter.rb in the Rails lib dir.
+
+You will then need to add
+  require 'kirbybase_adapter'
+in the config/environment.rb file of your project.
+
+If you plan on multi-database development / deployment, you must require the adapter
+only if necessary:
+  require 'kirbybase_adapter' if ActiveRecord::Base.configurations[RAILS_ENV]['adapter'] == 'kirbybase'
+
+This is because Ackbar overrides certain methods in ActiveRecord::Base and others.
+These methods translate the standard SQL generation to method calls on KirbyBase,
+and obviously should not be overridden for regular DBs.
+
+See the FAQ file for more information. Additional information can be found on
+Jamey Cribbs blog on building through the Agile Web Development with Rails Depot
+application with Ackbar/KirbyBase at: http://houseonfire.wordpress.com/
+

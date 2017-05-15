@@ -1,0 +1,6 @@
+--- !omap
+- andy:
+    name: Andy Hunt
+
+- dave:
+    name: Dave Thomas
