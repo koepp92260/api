@@ -1,76 +1,153 @@
+require 'rubygems'
 require 'rake'
-require 'rake/clean'
 require 'rake/testtask'
+require 'rake/rdoctask'
 require 'rake/gempackagetask'
+require 'rake/contrib/rubyforgepublisher'
+require File.join(File.dirname(__FILE__), 'lib', 'support', 'gateway_support')
 
-CLEAN << 'pkg' << 'doc' << 'test/db' << '*.log' << '*.orig'
 
-desc "Run all tests by default"
-task :default => [:basic_tests, :ar_tests]
+PKG_VERSION = "1.03"
+PKG_NAME = "abtain_billing"
+PKG_FILE_NAME = "#{PKG_NAME}-#{PKG_VERSION}"
 
-desc 'Run the unit tests in test directory'
-Rake::TestTask.new('basic_tests') do |t|
-  t.libs << 'test'
-  t.pattern = 'test/*_test.rb'
-  t.verbose = true
+PKG_FILES = FileList[
+    "lib/**/*", "test/**/*", "script/**/*", "[a-zA-Z]*"
+].exclude(/\.svn$/)
+
+
+desc "Default Task"
+task :default => 'test:units'
+
+# Run the unit tests
+namespace :test do
+
+  Rake::TestTask.new(:units) do |t|
+    t.pattern = 'test/unit/**/*_test.rb'
+    t.ruby_opts << '-rubygems'
+    t.libs << 'test'
+    t.verbose = true
+  end
+
+  Rake::TestTask.new(:remote) do |t|
+    t.pattern = 'test/remote/**/*_test.rb'
+    t.ruby_opts << '-rubygems'
+    t.libs << 'test'
+    t.verbose = true
+  end
+
 end
 
-desc 'Run the ActiveRecords tests with Ackbar'
-Rake::TestTask.new('ar_tests') do |t|
-  t.libs << 'test'
-  t.pattern = 'ar_base_tests_runner.rb'
-  t.verbose = true
+# Genereate the RDoc documentation
+Rake::RDocTask.new do |rdoc|
+  rdoc.rdoc_dir = 'doc'
+  rdoc.title    = "AbtainBilling library"
+  rdoc.options << '--line-numbers' << '--inline-source' << '--main=README'
+  rdoc.rdoc_files.include('README', 'CHANGELOG')
+  rdoc.rdoc_files.include('lib/**/*.rb')
+  rdoc.rdoc_files.exclude('lib/tasks')
 end
 
-require 'kirbybase_adapter'
-ackbar_spec = Gem::Specification.new do |s|
-  s.platform = Gem::Platform::RUBY
-  s.name = 'ackbar'
-  s.version = ActiveRecord::ConnectionAdapters::KirbyBaseAdapter::VERSION
-  s.summary = "ActiveRecord KirbyBase Adapter"
-  s.description = %q{An adapter for Rails::ActiveRecord ORM to the KirbyBase pure-ruby DBMS}
+task :install => [:package] do
+  `gem install pkg/#{PKG_FILE_NAME}.gem`
+end
 
-  s.author = "Assaph Mehr"
-  s.email = "assaph@gmail.com"
-  s.rubyforge_project = 'ackbar'
-  s.homepage = 'http://ackbar.rubyforge.org'
+task :lines do
+  lines = 0
+  codelines = 0
+  Dir.foreach("lib") { |file_name| 
+    next unless file_name =~ /.*rb/
 
+    f = File.open("lib/" + file_name)
+
+    while line = f.gets
+      lines += 1
+      next if line =~ /^\s*$/
+      next if line =~ /^\s*#/
+      codelines += 1
+    end
+  }
+  puts "Lines #{lines}, LOC #{codelines}"
+end
+
+desc "Delete tar.gz / zip / rdoc"
+task :cleanup => [ :clobber_package, :clobber_rdoc ]
+
+spec = Gem::Specification.new do |s|
+  s.name = PKG_NAME
+  s.version = PKG_VERSION
+  s.summary = "Payment Framework focused on Authorize.net CIM for dealing with stored credit card transactions."
   s.has_rdoc = true
-  s.extra_rdoc_files = %W{README CHANGELOG TODO FAQ}
-  s.rdoc_options << '--title' << 'Ackbar -- ActiveRecord Adapter for KirbyBase' <<
-                    '--main'  << 'README' <<
-                    '--exclude' << 'test' <<
-                    '--line-numbers'
+
+  s.files = PKG_FILES
+
+  s.rubyforge_project = "abtain_billing"
+  s.require_path = 'lib'
+  s.author = "Dan Quellhorst"
+  s.email = "dan@abtain.com"
+  s.homepage = "http://www.abtain.com/"
   
-  s.add_dependency('KirbyBase', '= 2.5.2')
-  s.add_dependency('activerecord', '= 1.13.2')
-
-  s.require_path = '.'
-
-  s.files =  FileList.new %W[
-    kirbybase_adapter.rb
-    Rakefile
-    CHANGELOG
-    FAQ
-    README
-    TODO
-    test/00*.rb
-    test/ar_base_tests_runner.rb
-    test/ar_model_adaptation.rb
-    test/connection.rb
-    test/create_dbs_for_ar_tests.rb
-    test/kb_*_test.rb
-    test/model.rb
-    test/schema.rb
-    test/test_helper.rb
-    test/fixtures/*.yml
-  ]
+  s.add_dependency('activesupport', '>= 2.3.2')
+  s.add_dependency('builder', '>= 2.0.0')
+  
+  #s.signing_key = ENV['GEM_PRIVATE_KEY']
+  #s.cert_chain  = ['gem-public_cert.pem']
 end
 
-desc 'Package as gem & zip'
-Rake::GemPackageTask.new(ackbar_spec) do |p|
-  p.gem_spec = ackbar_spec
+Rake::GemPackageTask.new(spec) do |p|
+  p.gem_spec = spec
   p.need_tar = true
   p.need_zip = true
 end
 
+desc "Release the gems and docs to RubyForge"
+task :release => [ :publish, :upload_rdoc ]
+
+desc "Publish the release files to RubyForge."
+task :publish => [ :package ] do
+  require 'rubyforge'
+  
+  packages = %w( gem tgz zip ).collect{ |ext| "pkg/#{PKG_NAME}-#{PKG_VERSION}.#{ext}" }
+  
+  rubyforge = RubyForge.new
+  rubyforge.configure
+  rubyforge.login
+  rubyforge.add_release(PKG_NAME, PKG_NAME, "REL #{PKG_VERSION}", *packages)
+end
+
+desc 'Upload RDoc to RubyForge'
+task :upload_rdoc => :rdoc do
+  user = ENV['RUBYFORGE_USER'] 
+  project = "/var/www/gforge-projects/#{PKG_NAME}"
+  local_dir = 'doc'
+  pub = Rake::SshDirPublisher.new user, project, local_dir
+  pub.upload
+end
+
+namespace :gateways do
+  desc 'Print the currently supported gateways'
+  task :print do
+    support = GatewaySupport.new
+    support.to_s
+  end
+  
+  namespace :print do
+    desc 'Print the currently supported gateways in RDoc format'
+    task :rdoc do
+      support = GatewaySupport.new
+      support.to_rdoc
+    end
+  
+    desc 'Print the currently supported gateways in Textile format'
+    task :textile do
+      support = GatewaySupport.new
+      support.to_textile
+    end
+    
+    desc 'Print the gateway functionality supported by each gateway'
+    task :features do
+      support = GatewaySupport.new
+      support.features
+    end
+  end
+end
